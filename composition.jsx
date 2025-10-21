@@ -1,6 +1,6 @@
 import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
 import React from "react";
-import { AbsoluteFill, useCurrentFrame, interpolate, Audio, Img, spring, useVideoConfig, Sequence } from "remotion";
+import { AbsoluteFill, useCurrentFrame, interpolate, Audio, Img, spring, useVideoConfig, Sequence, delayRender, continueRender } from "remotion";
 const Visualizer = ({ pulseAmount, targetColor, radius, lineWidth }) => {
   if (!pulseAmount || pulseAmount <= 0.1) {
     return null;
@@ -194,41 +194,68 @@ const LevelDisplay = ({ level, isVisible }) => {
   });
 };
 const Avatar = ({ user }) => {
-  const [srcIndex, setSrcIndex] = React.useState(0);
-  const sources = React.useMemo(() => {
-    if (!user || !user.avatar_url) return [];
+  const [handle] = React.useState(() => delayRender("Loading PFP"));
+  const [finalSrc, setFinalSrc] = React.useState(null);
+  React.useEffect(() => {
+    if (!user || !user.avatar_url) {
+      setFinalSrc("fallback");
+      continueRender(handle);
+      return;
+    }
     const originalUrl = user.avatar_url;
-    return [
-      originalUrl,
+    const sources = [
       `https://api.cors.lol/?url=${encodeURIComponent(originalUrl)}`,
       `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalUrl)}`,
-      `https://api.everyorigin.workers.dev/raw?url=${encodeURIComponent(originalUrl)}`
+      `https://api.everyorigin.workers.dev/raw?url=${encodeURIComponent(originalUrl)}`,
+      originalUrl
+      // Try original last as it's most likely to fail
     ];
-  }, [user]);
-  const handleError = () => {
-    if (srcIndex < sources.length - 1) {
-      setSrcIndex(srcIndex + 1);
-    }
-  };
-  if (srcIndex >= sources.length) {
+    let hasResolved = false;
+    const trySource = async (index) => {
+      if (hasResolved || index >= sources.length) {
+        if (!hasResolved) {
+          setFinalSrc("fallback");
+          continueRender(handle);
+        }
+        return;
+      }
+      try {
+        const response = await fetch(sources[index], { mode: "cors" });
+        if (response.ok) {
+          const blob = await response.blob();
+          if (blob.type.startsWith("image/")) {
+            const objectURL = URL.createObjectURL(blob);
+            setFinalSrc(objectURL);
+            hasResolved = true;
+            continueRender(handle);
+            return;
+          }
+        }
+        trySource(index + 1);
+      } catch (e) {
+        trySource(index + 1);
+      }
+    };
+    trySource(0);
+  }, [user, handle]);
+  if (finalSrc === "fallback" || !finalSrc) {
     return /* @__PURE__ */ jsxDEV("div", { style: { width: "50px", height: "50px", borderRadius: "50%", backgroundColor: "#4a4a6a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", fontWeight: "bold" }, children: user ? user.username.charAt(0).toUpperCase() : "?" }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 141,
+      lineNumber: 175,
       columnNumber: 13
     });
   }
   return /* @__PURE__ */ jsxDEV(
     Img,
     {
-      src: sources[srcIndex],
-      style: { width: "50px", height: "50px", borderRadius: "50%" },
-      onError: handleError
+      src: finalSrc,
+      style: { width: "50px", height: "50px", borderRadius: "50%" }
     },
     void 0,
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 148,
+      lineNumber: 183,
       columnNumber: 9
     }
   );
@@ -251,38 +278,38 @@ const EndScreenOverlay = ({ score, level, user, isGameOver }) => {
     user && /* @__PURE__ */ jsxDEV("div", { style: { position: "absolute", top: "20px", left: "20px", display: "flex", alignItems: "center", gap: "10px", transform: `scale(${scaleIn})` }, children: [
       /* @__PURE__ */ jsxDEV(Avatar, { user }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 179,
+        lineNumber: 213,
         columnNumber: 21
       }),
       /* @__PURE__ */ jsxDEV("span", { style: { fontSize: "24px", fontWeight: "bold", textShadow: "2px 2px 4px #000" }, children: user.username }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 180,
+        lineNumber: 214,
         columnNumber: 21
       })
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 178,
+      lineNumber: 212,
       columnNumber: 18
     }),
     /* @__PURE__ */ jsxDEV("div", { style: { position: "absolute", top: "30px", right: "20px", fontSize: "24px", fontWeight: "bold", textShadow: "2px 2px 4px #000", transform: `scale(${scaleIn})`, textAlign: "right" }, children: [
       /* @__PURE__ */ jsxDEV("div", { children: finalScoreText }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 187,
+        lineNumber: 221,
         columnNumber: 17
       }),
       /* @__PURE__ */ jsxDEV("div", { children: finalLevelText }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 188,
+        lineNumber: 222,
         columnNumber: 17
       })
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 186,
+      lineNumber: 220,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 175,
+    lineNumber: 209,
     columnNumber: 9
   });
 };
@@ -292,7 +319,7 @@ const ReplayComposition = ({ replayData }) => {
   if (!replayData || !replayData.frames || replayData.frames.length < 2) {
     return /* @__PURE__ */ jsxDEV(AbsoluteFill, { style: { backgroundColor: "#1a1a2e", color: "white", justifyContent: "center", alignItems: "center" }, children: "Loading replay..." }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 199,
+      lineNumber: 233,
       columnNumber: 16
     });
   }
@@ -341,46 +368,46 @@ const ReplayComposition = ({ replayData }) => {
       score
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 260,
+      lineNumber: 294,
       columnNumber: 21
     }) }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 259,
+      lineNumber: 293,
       columnNumber: 17
     }),
     /* @__PURE__ */ jsxDEV(AbsoluteFill, { style: { justifyContent: "center", alignItems: "center" }, children: [
       /* @__PURE__ */ jsxDEV(LevelDisplay, { level, isVisible: !showEndScreen || isDuringEndScreen }, `level-${level}`, false, {
         fileName: "<stdin>",
-        lineNumber: 268,
+        lineNumber: 302,
         columnNumber: 17
       }),
       /* @__PURE__ */ jsxDEV("div", { style: { width: "90%", height: "auto", aspectRatio: "1 / 1" }, children: /* @__PURE__ */ jsxDEV(GameCanvas, { frameData: currentFrameData, config }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 270,
+        lineNumber: 304,
         columnNumber: 21
       }) }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 269,
+        lineNumber: 303,
         columnNumber: 17
       })
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 267,
+      lineNumber: 301,
       columnNumber: 13
     }),
     showEndScreen && /* @__PURE__ */ jsxDEV(EndScreenOverlay, { score, level, user: currentUser, isGameOver }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 275,
+      lineNumber: 309,
       columnNumber: 32
     }),
     /* @__PURE__ */ jsxDEV(Audio, { src: "/Infinite Orbit - Track 1 (Extended 2) - Sonauto.ogg", volume: musicVolume, loop: true }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 278,
+      lineNumber: 312,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV(Audio, { src: "/start_sound.mp3", volume: 0.5 }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 279,
+      lineNumber: 313,
       columnNumber: 13
     }),
     successFrames.map((f, i) => {
@@ -388,11 +415,11 @@ const ReplayComposition = ({ replayData }) => {
       if (frameForAudio < gameEndFrame) {
         return /* @__PURE__ */ jsxDEV(Sequence, { from: frameForAudio, children: /* @__PURE__ */ jsxDEV(Audio, { src: "/success.mp3" }, void 0, false, {
           fileName: "<stdin>",
-          lineNumber: 287,
+          lineNumber: 321,
           columnNumber: 25
         }) }, `success-${i}`, false, {
           fileName: "<stdin>",
-          lineNumber: 286,
+          lineNumber: 320,
           columnNumber: 22
         });
       }
@@ -400,16 +427,16 @@ const ReplayComposition = ({ replayData }) => {
     }),
     isGameOver && /* @__PURE__ */ jsxDEV(Sequence, { from: gameEndFrame - 1, children: /* @__PURE__ */ jsxDEV(Audio, { src: "/fail.mp3" }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 296,
+      lineNumber: 330,
       columnNumber: 21
     }) }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 295,
+      lineNumber: 329,
       columnNumber: 17
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 256,
+    lineNumber: 290,
     columnNumber: 9
   });
 };
